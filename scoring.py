@@ -49,14 +49,21 @@ def combine_signals(model_score: float, style_score: float) -> float:
       - Milestone 4 asks you to find a case where your two signals split and
         write it down. That case is what this rule exists to handle.
 
-    The weights in config.py are placeholders. Change them, or ignore them and
-    write a different rule.
+    The weights and the disagreement gap live in config.py. When the signals
+    differ by at least DISAGREE_GAP, this returns their plain average, which
+    lands near the middle. When they agree, the model carries 0.55 and the
+    style signal 0.45.
     """
-    # TODO: replace this
-    return (
-        config.WEIGHT_MODEL_SIGNAL * model_score
-        + config.WEIGHT_STYLE_SIGNAL * style_score
-    )
+    model_score = min(max(float(model_score), 0.0), 1.0)
+    style_score = min(max(float(style_score), 0.0), 1.0)
+    if abs(model_score - style_score) >= config.DISAGREE_GAP:
+        combined = (model_score + style_score) / 2.0
+    else:
+        combined = (
+            config.WEIGHT_MODEL_SIGNAL * model_score
+            + config.WEIGHT_STYLE_SIGNAL * style_score
+        )
+    return round(min(max(combined, 0.0), 1.0), 4)
 
 
 def score_to_label(score: float) -> tuple[str, str]:
@@ -85,12 +92,14 @@ def score_to_label(score: float) -> tuple[str, str]:
     think if they got it on their own work. That question is the whole
     milestone.
     """
-    # TODO: replace this — thresholds are in config.py
     if score >= config.AI_THRESHOLD:
-        return "ai", "PLACEHOLDER — write the high-confidence AI label."
+        return "ai", "We think a model wrote this."
     if score <= config.HUMAN_THRESHOLD:
-        return "human", "PLACEHOLDER — write the high-confidence human label."
-    return "unsure", "PLACEHOLDER — write the unsure label."
+        return "human", "We think a person wrote this."
+    return (
+        "unsure",
+        "We can't tell whether a person or a model wrote this, so we are not labelling it as either.",
+    )
 
 
 def label_ranges() -> list[tuple[str, str]]:

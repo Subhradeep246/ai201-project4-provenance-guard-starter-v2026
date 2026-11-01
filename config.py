@@ -54,8 +54,16 @@ DETECTOR_MAX_TOKENS = 400
 # down BEFORE you code it, and to put the numbers in your README. Whatever you
 # decide, it goes here.
 
-WEIGHT_MODEL_SIGNAL = 0.5
-WEIGHT_STYLE_SIGNAL = 0.5
+# The model reads the words, so it carries slightly more weight when the two
+# signals agree. The style signal cannot read, so it does not get a veto by
+# being larger.
+WEIGHT_MODEL_SIGNAL = 0.55
+WEIGHT_STYLE_SIGNAL = 0.45
+
+# When the two signals differ by at least this much, the average replaces the
+# weighted sum. A 0.9 and a 0.1 is a disagreement, and a disagreement is
+# uncertainty, not a vote for the louder number.
+DISAGREE_GAP = 0.40
 
 
 # ─── Thresholds (Milestone 5) ────────────────────────────────────────────────
@@ -71,8 +79,15 @@ WEIGHT_STYLE_SIGNAL = 0.5
 # getting through. There is no setting that avoids the trade — only settings
 # that decide who pays for it.
 
-HUMAN_THRESHOLD = 0.35
-AI_THRESHOLD = 0.65
+# Wide unsure band on purpose. Accusing a real writer costs more than letting
+# some AI text through, so a score has to be plainly high before it says AI
+# and plainly low before it says human.
+HUMAN_THRESHOLD = 0.30
+AI_THRESHOLD = 0.72
+
+# Past this, /submit refuses the body instead of scoring it. The detector only
+# reads 400 tokens anyway, and an unbounded body is how a route gets stuck.
+MAX_TEXT_CHARS = 8000
 
 # ⚠️ One thing that catches people out in Milestone 5. A weighted average can
 # only land between its two inputs — so while `style_signal` is still the stub
