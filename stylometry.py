@@ -49,56 +49,63 @@ def words(text: str) -> list[str]:
 
 def sentence_length_spread(text: str) -> float:
     """
-    How much sentence length varies. ← TODO
+    Coefficient of variation of sentence lengths, in words.
 
-    Returns:
-        A float. Decide yourself what scale it's on and which direction means
-        "more human" — then write that down, because your combining rule
-        depends on knowing it.
-
-    A hint on what you're reaching for: the standard deviation of sentence
-    lengths, probably divided by the mean so a long text and a short one are
-    comparable. `statistics.stdev` is imported for you.
-
-    Watch the edge case: a one-sentence submission has no spread at all, and
-    `stdev` raises on fewer than two values. Decide what that should return
-    before the attack set decides for you.
+    Higher means lumpier writing, which I treat as more human. A single
+    sentence has no spread, so it returns 0.0 — the uniform, more AI-like end.
+    `stdev` needs two lengths, and this returns before calling it.
     """
-    # TODO: replace this
-    return 0.0
+    lengths = [len(words(sentence)) for sentence in sentences(text)]
+    lengths = [n for n in lengths if n > 0]
+    if len(lengths) < 2:
+        return 0.0
+    mean = statistics.mean(lengths)
+    if mean == 0:
+        return 0.0
+    return statistics.stdev(lengths) / mean
 
 
 def type_token_ratio(text: str) -> float:
     """
-    Unique words over total words. ← TODO
+    Unique words over total words, on the first 120 words only.
 
-    Returns:
-        A float between 0 and 1. Higher means more varied vocabulary.
-
-    Worth knowing before you rely on it: this measure falls as text gets
-    longer, because common words repeat. Two texts of different lengths aren't
-    directly comparable on it, and if your test inputs vary a lot in length,
-    that alone can look like a signal.
+    Higher means a more varied vocabulary, which I treat as more human.
+    The window is there because this ratio falls as a text gets longer even
+    when the writer doesn't change. Two texts past 120 words are compared on
+    the same slice. Empty text returns 0.0.
     """
-    # TODO: replace this
-    return 0.0
+    tokens = words(text)[:120]
+    if not tokens:
+        return 0.0
+    return len(set(tokens)) / len(tokens)
+
+
+# Full stops are left out. Almost every sentence has one, so they don't
+# separate writers. Commas, semicolons, dashes, and the rest do.
+_MARKS = set(",;:!?()\"'`—–-")
 
 
 def punctuation_density(text: str) -> float:
     """
-    How much punctuation, relative to length. ← TODO
+    Distinctive punctuation marks per word. Higher means more of them.
 
-    Returns:
-        A float. Whether you count all punctuation or only some kinds — commas,
-        semicolons, dashes — is a real choice. Semicolons and em dashes are
-        more interesting than full stops, because they vary more between
-        writers.
+    I treat a higher density as more human. The count is marks from `_MARKS`
+    divided by the word count, so a long text is not punished for being long.
+    Empty text returns 0.0.
     """
-    # TODO: replace this
-    return 0.0
+    tokens = words(text)
+    if not tokens:
+        return 0.0
+    marks = sum(1 for ch in text if ch in _MARKS)
+    return marks / len(tokens)
 
 
 # ── Combining them ───────────────────────────────────────────────────────────
+
+def _unit(value: float) -> float:
+    """Clamp to the 0–1 range the other signal already uses."""
+    return min(max(value, 0.0), 1.0)
+
 
 def style_signal(text: str) -> float:
     """
@@ -122,8 +129,17 @@ def style_signal(text: str) -> float:
     you trust it. Plain and ordinary, not formal: formal prose reads as *human*
     to signal one, and it is plain writing that gets accused.
     """
-    # TODO: replace this
-    return 0.5
+    # Each piece is flipped so that higher means more AI, then clamped to 0–1.
+    # Spread of 0.75 (very lumpy) maps to 0. Type-token ratio of 0.70 maps to
+    # 0; 0.42 maps to 1. Punctuation density of 0.14 marks per word maps to 0.
+    spread = sentence_length_spread(text)
+    ratio = type_token_ratio(text)
+    density = punctuation_density(text)
+
+    ai_from_spread = _unit(1.0 - spread / 0.75)
+    ai_from_vocab = _unit((0.70 - ratio) / 0.28)
+    ai_from_punct = _unit(1.0 - density / 0.14)
+    return round((ai_from_spread + ai_from_vocab + ai_from_punct) / 3.0, 4)
 
 
 if __name__ == "__main__":
@@ -139,4 +155,3 @@ if __name__ == "__main__":
     print(f"type_token_ratio         {type_token_ratio(text)}")
     print(f"punctuation_density      {punctuation_density(text)}")
     print(f"style_signal             {style_signal(text)}   (higher = more likely AI)")
-    print("\nAll zeros? These are stubs — Milestone 4 is where you build them.")
