@@ -42,61 +42,50 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. Of 8 paragraphs I wrote myself, at most 1 is labelled high-confidence AI
 
-<!-- Your criterion. It must name a number. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** A wrong accusation costs the writer more than a missed
+detection costs the site. One in eight is already a lot of false accusations
+to live with, and I am not writing zero: the model signal treats plain,
+ordinary sentences as predictable, so a promise of zero is a promise this
+signal cannot keep. Unit 8 has to hold the same count on all three trials.
 
 ---
 
-## 2.
+## 2. A clearly AI paragraph scores at least 0.20 higher than a clearly human one
 
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** The two pieces are ones I can tell apart by reading them.
+If their combined scores land within 0.20, the thresholds are sitting on noise
+and the labels are not measuring the difference I think they are. 0.20 is
+tighter than the unsure band, so this can fail even when both texts are
+labelled unsure.
 
 ---
 
-## 3.
+## 3. Each of the three labels appears at least once in a set of 6 inputs
 
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** Two inputs I expect to read as human, two as AI, two as
+borderline. A label that none of those six can reach is not a label I can
+show a reader. Six is enough to cover three labels without pretending the
+detector is accurate.
 
 ---
 
-## 4.
+## 4. 5 real appeals move to `under_review` in the log; 3 unknown ids return 404 and add no appeal line
 
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** The appeal is the only way off a wrong accusation, so
+every real `content_id` has to change status and leave both the original
+decision and the appeal in the log. A typo has to fail in the open: 404, and
+no appeal line, or a bad id looks like a successful review.
 
 ---
 
-## 5.
+## 5. Missing text, empty text, and text over 8,000 characters each return 400 and a rejection log line, never 500
 
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
+**Why this target:** Those three are the bodies a public route actually
+receives when a client is broken or hostile. A 500 means the service fell
+over. A 400 with no log line is a refusal I cannot see next unit. 8,000
+characters is the cap in `config.py`.
 
 
 
