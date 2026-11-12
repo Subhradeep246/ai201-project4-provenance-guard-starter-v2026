@@ -34,21 +34,24 @@
 
 <!-- ═══════════════════════ UNIT 7 — THE BUILD ═══════════════════════ -->
 
+**Repository URL (submit this):** `https://github.com/Subhradeep246/ai201-project4-provenance-guard-starter-v2026`
+
 ## What This Does
 
-A submission is a piece of writing from a creator. The service answers with a label a reader can understand, and keeps a log so a wrong label can be appealed.
+A writer sends a paragraph. The service answers with a sentence a reader can understand, and it keeps a log so a wrong sentence can be appealed. It does not claim to know who wrote the paragraph. It claims two measurements, a rule for combining them, and a place to object.
 
-The person I followed through it is someone writing plainly on purpose: short sentences, ordinary words, no ornaments. Signal one treats that as predictable, which is the same thing it treats as machine-written. If both signals agree, the label can accuse them. If they split, the score is pulled to the middle and the label says we can't tell.
+The person I followed through it is someone writing plainly on purpose. Short sentences. Ordinary words. No ornaments. That person is not trying to trick a detector. They are just writing the way they write. Signal one treats that as predictable, which is the same thing it treats as machine-written. That is the expensive mistake, so the rest of the service is built around not turning that mistake into a confident accusation.
 
-1. `POST /submit` receives JSON with `text` and `creator_id`.
-2. A missing field, an empty string, or more than 8,000 characters is a `400`, and `audit.log_rejection` writes the refusal. The route does not score it.
-3. `detector.model_signal` scores how predictable the text is to gpt2. Higher means more likely AI.
-4. `stylometry.style_signal` scores the shape of the text, without reading it. Higher means more likely AI.
-5. `scoring.combine_signals` turns the two numbers into one. A gap of 0.40 or more is a disagreement, and the score becomes their average.
-6. `scoring.score_to_label` turns that number into `human`, `unsure`, or `ai`, plus a sentence.
-7. `audit.log_decision` appends the decision, including a `content_id`.
-8. The response sends that id, both signal scores, the combined score, the guess, and the sentence.
-9. `POST /appeal` with that `content_id` leaves the original decision where it is and appends a line with status `under_review`. An id that was never decided is a `404`.
+I walked their actual paragraph through the live service. The text was: "I went to the store after class. The rain was light and I forgot my bag. I bought bread and milk and stood in line. The person in front of me paid with coins. I walked home and put the food away."
+
+1. `POST /submit` received `{"text": "...", "creator_id": "subhradeep"}`. Both fields were present, the string was not empty, and it was under 8,000 characters, so the route scored it. A missing field, an empty string, or a body over the cap is a `400` and `audit.log_rejection` writes the refusal — the route does not score those.
+2. `detector.model_signal` scored **0.7115**. gpt2 was not very surprised. Common words in short sentences look like the text a model would emit. Authorship is not what this number sees.
+3. `stylometry.style_signal` scored **0.6193**. It never read the paragraph. It saw even sentence lengths, a small vocabulary on the first 120 words, and almost no punctuation besides full stops. Shape, not meaning.
+4. `scoring.combine_signals` compared the two. The gap is 0.0922, under 0.40, so they are treated as agreeing. The combined score is `0.55 * 0.7115 + 0.45 * 0.6193 = 0.67`. The model carries a little more weight because it actually reads the words, but it does not get a veto.
+5. `scoring.score_to_label` maps 0.67. That is above 0.30 and below 0.72, so the guess is `unsure` and the sentence is: "We can't tell whether a person or a model wrote this, so we are not labelling it as either." The AI band starts at 0.72 on purpose. This paragraph is exactly why.
+6. `audit.log_decision` appended a line with `content_id` `f02e8e3dac7b450ab2599bc804b85f86`, both scores, the combined score, the guess, the sentence, and `status: decided`.
+7. The JSON response sent that id, `guess`, `confidence` (the combined score), `label`, `model_score`, and `style_score`. Unit 8's tools read the two signal scores off this response.
+8. If this writer appeals with that `content_id`, `POST /appeal` leaves the original `decided` line where it is and appends `under_review`. An id that was never decided is a `404` and a rejection line, not a fake review.
 
 
 
@@ -68,7 +71,7 @@ The person I followed through it is someone writing plainly on purpose: short se
 
 **Why that might differ between human and AI writing:** A model writes by picking likely next words, so text it wrote tends to be text it finds easy to predict. Human writing wanders more: an odd word, a hard turn, a specific detail.
 
-**What it can't see:** Authorship. It sees predictability. Common words in short, ordinary sentences score like machine text, which is how a person writing in a second language, a younger writer, or anyone writing plainly gets accused. Dense prose with rare words often goes the other way and scores as human, because rare words surprise the model. On the plain paragraph below, this signal alone scored 0.7092.
+**What it can't see:** Authorship. It sees predictability. Common words in short, ordinary sentences score like machine text, which is how a person writing in a second language, a younger writer, or anyone writing plainly gets accused. Dense prose with rare words often goes the other way and scores as human, because rare words surprise the model. On the store-after-class paragraph, this signal alone scored 0.7115.
 
 ### Signal two — the style signal
 
@@ -96,7 +99,18 @@ The person I followed through it is someone writing plainly on purpose: short se
 
 The text was: "In conclusion, it is important to note that this approach offers several benefits. Furthermore, it is worth mentioning that the overall process is simple. Additionally, users can easily understand the system. Overall, the solution works well."
 
-`detector.model_signal` returned 0.7671. `stylometry.style_signal` returned 0.2218. The gap is 0.545, which is past 0.40, so `combine_signals` returned their average, 0.4945, and `score_to_label` said `unsure`. A weighted sum would have been `0.55 * 0.7671 + 0.45 * 0.2218 = 0.5217`, also unsure, but the rule that actually fired is the average. The model signal was ready to lean AI. The style signal was not. The label does not accuse.
+`detector.model_signal` returned 0.7671. `stylometry.style_signal` returned 0.2218. The gap is 0.5453, which is past 0.40, so `combine_signals` returned their average, 0.4945, and `score_to_label` said `unsure`. A weighted sum would have been `0.55 * 0.7671 + 0.45 * 0.2218 = 0.5217`, also unsure, but the rule that actually fired is the average. The model signal was ready to lean AI. The style signal was not. The label does not accuse.
+
+**Four calibration inputs I ran on the live service**
+
+| Input | What it is | model | style | combined | guess |
+|---|---|---|---|---|---|
+| bus / rain / yellow coat | lumpy human writing | 0.3015 | 0.2508 | 0.2787 | human |
+| store after class | plain human writing | 0.7115 | 0.6193 | 0.6700 | unsure |
+| "In conclusion…" boilerplate | stock AI-looking prose | 0.7671 | 0.2218 | 0.4945 | unsure |
+| repeated "results are good" | even sentences, tiny vocab | 0.8480 | 0.8925 | 0.8680 | ai |
+
+The stock AI paragraph is the one that looks like AI when you read it, and the style signal still refuses to agree. The repeated paragraph is what actually crosses 0.72. That is a limit of the combining rule, not a secret I am hiding: confident `ai` needs both signals high, or at least close enough that the weighted sum can get there.
 
 
 
@@ -115,7 +129,7 @@ The text was: "In conclusion, it is important to note that this approach offers 
 | unsure | 0.30 – 0.72 | We can't tell whether a person or a model wrote this, so we are not labelling it as either. |
 | high-confidence AI | 0.72 – 1.00 | We think a model wrote this. |
 
-A score sitting on 0.30 is human, and a score sitting on 0.72 is AI, because `score_to_label` uses `<=` and `>=`. All three were reached on the live service: the lumpy bus paragraph at 0.1802 (`human`), the store-and-rain paragraph at 0.5564 (`unsure`), and the repeated "results are good" paragraph at 0.868 (`ai`).
+A score sitting on 0.30 is human, and a score sitting on 0.72 is AI, because `score_to_label` uses `<=` and `>=`. All three were reached on the live service on 12 Nov 2026: the lumpy bus paragraph at 0.2787 (`human`), the store-after-class paragraph at 0.67 (`unsure`), and the repeated "results are good" paragraph at 0.868 (`ai`).
 
 **Why I worded the "unsure" one this way:**
 
@@ -141,16 +155,18 @@ The person reading it may have written every word. The sentence says we cannot t
      diagnostics. -->
 
 ```bash
-$ curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" --data-binary "@submit.json"
+$ curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" --data-binary "@submit_ai.json"
 ```
 
-`submit.json` was `{"text": "The results are good. The results are clear. The results are useful. The system provides good results. The system provides clear results. The system provides useful results for users.", "creator_id": "subhradeep"}`.
+`submit_ai.json` is in the repo: `{"text": "The results are good. The results are clear. The results are useful. The system provides good results. The system provides clear results. The system provides useful results for users.", "creator_id": "subhradeep"}`.
+
+Pasted response (HTTP 200):
 
 ```json
 {
   "combined_score": 0.868,
   "confidence": 0.868,
-  "content_id": "d35186e0feaf45e28ef68f1803a0dda7",
+  "content_id": "a352b0ec970c49ca882881eaa2b88b4f",
   "guess": "ai",
   "label": "We think a model wrote this.",
   "model_score": 0.848,
@@ -158,51 +174,113 @@ $ curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/js
 }
 ```
 
+The same route also returned the other two labels, so none of them is a dead band:
+
+- `@submit_human.json` (bus paragraph) → `guess: "human"`, `combined_score: 0.2787`, `content_id: "7fbdc9d226cd441fbe60db2394f999ca"`
+- `@submit_plain.json` (store after class) → `guess: "unsure"`, `combined_score: 0.67`, `content_id: "f02e8e3dac7b450ab2599bc804b85f86"`
+
+Empty `text` returned HTTP 400 `{"error": "bad_request", "message": "text is empty."}`. A body with no `text` field returned HTTP 400 `{"error": "bad_request", "message": "text is required and must be a string."}`.
+
 **An appeal**
 
 ```bash
 $ curl.exe -X POST http://127.0.0.1:5000/appeal -H "Content-Type: application/json" --data-binary "@appeal.json"
 ```
 
+`appeal.json` is `{"content_id": "a352b0ec970c49ca882881eaa2b88b4f", "reasoning": "I wrote the repeated sentences myself as a test, and the label calls them a model's."}`.
+
+Pasted response (HTTP 200):
+
 ```json
 {
-  "content_id": "d35186e0feaf45e28ef68f1803a0dda7",
+  "content_id": "a352b0ec970c49ca882881eaa2b88b4f",
   "message": "A person will look at this. The original label stays up until they do.",
   "ok": true,
   "status": "under_review"
 }
 ```
 
-**What the log shows afterwards**
-
-The decision is still `decided`. The appeal is a later line. An unknown id returned 404 and a rejection, not an appeal.
+An id that was never decided:
 
 ```bash
-$ curl.exe "http://127.0.0.1:5000/log?limit=8"
+$ curl.exe -X POST http://127.0.0.1:5000/appeal -H "Content-Type: application/json" --data-binary "@appeal_unknown.json"
 ```
+
+Pasted response (HTTP 404):
 
 ```json
 {
-  "combined_score": 0.868,
-  "content_id": "d35186e0feaf45e28ef68f1803a0dda7",
-  "creator_id": "subhradeep",
-  "guess": "ai",
-  "label": "We think a model wrote this.",
-  "model_score": 0.848,
-  "status": "decided",
-  "style_score": 0.8925,
-  "timestamp": "2026-11-01T20:59:35+00:00"
+  "content_id": "does-not-exist",
+  "error": "not_found",
+  "message": "No decision with that content_id."
 }
 ```
 
+**What the log shows afterwards**
+
+The original decision is still `decided`. The appeal is a later line with the same `content_id`. The unknown id is a `rejected` line, not an appeal. This is the actual `GET /log` body, not a reconstruction:
+
+```bash
+$ curl.exe "http://127.0.0.1:5000/log?limit=6"
+```
+
 ```json
 {
-  "content_id": "d35186e0feaf45e28ef68f1803a0dda7",
-  "creator_id": "subhradeep",
-  "event": "appeal",
-  "reasoning": "I wrote the repeated sentences myself as a test, and the label calls them a model's.",
-  "status": "under_review",
-  "timestamp": "2026-11-01T21:00:09+00:00"
+  "count": 6,
+  "entries": [
+    {
+      "combined_score": 0.868,
+      "content_id": "a352b0ec970c49ca882881eaa2b88b4f",
+      "creator_id": "subhradeep",
+      "guess": "ai",
+      "label": "We think a model wrote this.",
+      "model_score": 0.848,
+      "status": "decided",
+      "style_score": 0.8925,
+      "timestamp": "2026-11-12T17:09:22+00:00"
+    },
+    {
+      "combined_score": 0.4945,
+      "content_id": "d6c65d2c527b40f78cdf5d0db81ae15d",
+      "creator_id": "subhradeep",
+      "guess": "unsure",
+      "label": "We can't tell whether a person or a model wrote this, so we are not labelling it as either.",
+      "model_score": 0.7671,
+      "status": "decided",
+      "style_score": 0.2218,
+      "timestamp": "2026-11-12T17:09:22+00:00"
+    },
+    {
+      "creator_id": "subhradeep",
+      "event": "rejected",
+      "reason": "empty_text",
+      "status": "rejected",
+      "timestamp": "2026-11-12T17:09:22+00:00"
+    },
+    {
+      "creator_id": "subhradeep",
+      "event": "rejected",
+      "reason": "missing_text",
+      "status": "rejected",
+      "timestamp": "2026-11-12T17:09:22+00:00"
+    },
+    {
+      "content_id": "a352b0ec970c49ca882881eaa2b88b4f",
+      "creator_id": "subhradeep",
+      "event": "appeal",
+      "reasoning": "I wrote the repeated sentences myself as a test, and the label calls them a model's.",
+      "status": "under_review",
+      "timestamp": "2026-11-12T17:09:37+00:00"
+    },
+    {
+      "content_id": "does-not-exist",
+      "creator_id": "unknown",
+      "event": "rejected",
+      "reason": "unknown_content_id",
+      "status": "rejected",
+      "timestamp": "2026-11-12T17:09:37+00:00"
+    }
+  ]
 }
 ```
 
@@ -212,15 +290,21 @@ $ curl.exe "http://127.0.0.1:5000/log?limit=8"
 
 **Moment 1**
 
-- *What I asked for:* Build unit 7 of Provenance Guard from the starter: criteria first, then the style signal, the combining rule, `/submit`, and `/appeal`.
-- *What came back:* An implementation of the stubs in `stylometry.py`, `scoring.py`, and `app.py`, plus a first pass at the thresholds.
-- *What I changed:* Kept the disagreement rule after calibration. The stock AI-looking paragraph scored 0.8864 on the model and 0.4579 on style, and the average landed at 0.6722, which is unsure rather than AI. I left that in place. A repeated paragraph was what actually crossed 0.72, which is a real limit of the rule and it is written above.
+- *What I asked for:* Draft five acceptance criteria that a unit 8 eval could actually run, covering false positives, score spread, labels, appeals, and bad input.
+- *What came back:* Numbered targets with "why" sentences, some of them too easy (zero false positives, every appeal succeeds).
+- *What I changed:* Dropped anything I could not miss. Kept "at most 1 of 8 of my own paragraphs labelled AI" because the model signal will accuse plain writing, so zero would be a lie. Kept the 0.20 score-spread target even though both texts can still land in `unsure`. Wrote the reasons in `criteria.md` before the routes existed.
 
 **Moment 2**
 
+- *What I asked for:* Implement the stubs in `stylometry.py` and `scoring.py`, then wire `/submit` and `/appeal`.
+- *What came back:* Three style measures, a 50/50 average, and thresholds around 0.35 / 0.65.
+- *What I changed:* Flipped each style measure so higher means AI, scaled punctuation density (raw marks-per-word is not on the same scale as type-token ratio), and put the numbers in `config.py`. Replaced 50/50 with 0.55 / 0.45 plus a 0.40 disagreement gap that falls back to a plain average. Widened the unsure band to 0.30–0.72 after the store-after-class paragraph scored 0.67 — that is the person I followed, and 0.65 would have called them AI. Wrote the three reader sentences so `unsure` admits we cannot tell and does not sound like an accusation.
+
+**Moment 3**
+
 - *What I asked for:* Recheck the running service with curl: ping, empty text, a missing field, one submission of each label, a real appeal, and an unknown id.
-- *What came back:* The JSON pasted in Sample Run, plus `human` at 0.1802 and `unsure` at 0.5564.
-- *What I changed:* The first curl attempt from PowerShell sent a body the route correctly rejected as not JSON. That rejection is the first line of `logs/audit.jsonl`. The later requests used files so the JSON arrived intact.
+- *What came back:* JSON, plus a first draft of Sample Run that pasted log *entries* as if they were the curl body.
+- *What I changed:* PowerShell's `curl` is not curl, so every request uses `curl.exe` and a `.json` file in the repo. The first broken body is still the first line of `logs/audit.jsonl` (`body_not_json_object`). Sample Run now pastes the real `GET /log` wrapper (`count` + `entries`), the 404 appeal, and the 400s. I also turned rate limiting back off — that is unit 8, and leaving it on made `/submit` look like a different service than the one this write-up describes.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
