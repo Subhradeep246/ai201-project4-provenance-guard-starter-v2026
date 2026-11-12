@@ -312,121 +312,151 @@ $ curl.exe "http://127.0.0.1:5000/log?limit=6"
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 10 per minute, 80 per day
 
 **Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
+A person resubmitting their own draft a few times an hour never hits 10 in a minute. A script sending a thousand variations to map the thresholds dies at the tenth request in a minute, and at 80 in a day. The flood check sends 15, so the minute cap has to sit under 15 or that check never prints a 429. 80 a day is still more than a careful writer needs and far less than a mapper needs.
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+**What a caller counts as:** `creator_id` when it is a non-empty string, otherwise the remote address (`app.py` `rate_limit_key`). One script that forges a new id on every row looks like a crowd and does not trip the minute cap — that is why the attack set never 429s except `flood_same_creator`. One household sharing an IP but using different creator ids also does not share a bucket. I counted per creator because the thing I actually wanted to stop is one account probing the threshold, not a library computer.
 
 **The run of status codes when I pushed past it:**
 
-<!-- python run_attacks.py --flood 15 -->
+Produced by `run_attacks.py::run_flood` (`python run_attacks.py --flood 15`). Also in `results/flood_2026-11-12_1235.md`.
 
 ```
-
+200 200 200 200 200 200 200 200 200 200 429 429 429 429 429
 ```
 
 ---
 
 ## Attack Run — Before
 
-<!-- Every attack with its outcome and a held-or-broke mark.
-     `run_attacks.py --label before` produces the table. -->
+The staff zip is not in the starter. I built `attack_set/` from the families `RUNNING.md` and `run_attacks.py` name: `false_positive`, typo / sentence-break / quotation evasions, clearly-AI controls, lumpy human, malformed requests, and `flood_same_creator`. Full table from `results/attack_run_2026-11-12_1236_before.md` (`run_attacks.py::main`). HELD means the attack did not get what `targets` asked for. BROKE means it did, or that a control I needed failed.
 
-
+| ID | Family | Targeting | Status | Guess | Score | Verdict |
+|---|---|---|---|---|---|---|
+| FP01 | false_positive | AI on human writing | 200 | unsure | 0.670 | HELD |
+| FP02 | false_positive | AI on human writing | 200 | ai | 0.742 | BROKE |
+| FP03 | false_positive | AI on human writing | 200 | unsure | 0.519 | HELD |
+| FP04 | false_positive | AI on human writing | 200 | unsure | 0.602 | HELD |
+| FP05 | false_positive | AI on human writing | 200 | unsure | 0.578 | HELD |
+| FP06 | false_positive | AI on human writing | 200 | unsure | 0.627 | HELD |
+| EV01 | evasion_typos | AI text human/unsure | 200 | ai | 0.825 | HELD |
+| EV02 | evasion_typos | AI text human/unsure | 200 | ai | 0.833 | HELD |
+| EV03 | evasion_break | AI text human/unsure | 200 | human | 0.234 | BROKE |
+| EV04 | evasion_break | AI text human/unsure | 200 | unsure | 0.406 | BROKE |
+| EV05 | evasion_quote | AI text human/unsure | 200 | unsure | 0.364 | BROKE |
+| EV06 | evasion_quote | AI text human/unsure | 200 | unsure | 0.421 | BROKE |
+| AI01 | clearly_ai | labelled AI | 200 | ai | 0.868 | HELD |
+| AI02 | clearly_ai | labelled AI | 200 | unsure | 0.494 | BROKE |
+| AI03 | clearly_ai | labelled AI | 200 | unsure | 0.672 | BROKE |
+| HM01 | lumpy_human | labelled AI (should not) | 200 | human | 0.258 | HELD |
+| HM02 | lumpy_human | labelled AI (should not) | 200 | unsure | 0.348 | HELD |
+| MR01–MR07 | malformed | 500 or crash | 400 | — | — | HELD |
+| FL01–FL10 | flood_same_creator | every request 200 | 200 | unsure | 0.338 | BROKE |
+| FL11–FL12 | flood_same_creator | every request 200 | 429 | — | — | HELD |
 
 **Ten audit log entries from the run**
 
-<!-- Choose entries that show the interesting failures, not the ten easiest. -->
+Chosen because they show the accusation, the chopped-sentence miss, the disagreement, a 429, a 400, an appeal, and the same FP02 after the fix. Full nine decision fields on the scored rows; rejections are logged too.
 
 ```json
-
+[
+  {"timestamp": "2026-11-12T17:36:10+00:00", "content_id": "5ee26bfc69bf49d7ba15aa30f54a8b6e", "creator_id": "attacker_FP02", "guess": "ai", "model_score": 0.8435, "style_score": 0.6175, "combined_score": 0.7418, "label": "We think a model wrote this.", "status": "decided"},
+  {"timestamp": "2026-11-12T17:36:11+00:00", "content_id": "00fa3179d3d449909aac16b8225886ac", "creator_id": "attacker_EV03", "guess": "human", "model_score": 0.1446, "style_score": 0.3444, "combined_score": 0.2345, "label": "We think a person wrote this.", "status": "decided"},
+  {"timestamp": "2026-11-12T17:36:12+00:00", "content_id": "d9d6cef7efa04af5aad74f2696c85585", "creator_id": "attacker_AI02", "guess": "unsure", "model_score": 0.7671, "style_score": 0.2218, "combined_score": 0.4945, "label": "We can't tell whether a person or a model wrote this, so we are not labelling it as either.", "status": "decided"},
+  {"timestamp": "2026-11-12T17:36:11+00:00", "content_id": "b02207cae97a43cebbb27f989e36996d", "creator_id": "attacker_EV01", "guess": "ai", "model_score": 0.77, "style_score": 0.8925, "combined_score": 0.8251, "label": "We think a model wrote this.", "status": "decided"},
+  {"timestamp": "2026-11-12T17:35:25+00:00", "creator_id": "flood_tester", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "10 per 1 minute"},
+  {"timestamp": "2026-11-12T17:36:12+00:00", "creator_id": "unknown", "event": "rejected", "status": "rejected", "reason": "body_not_json_object"},
+  {"timestamp": "2026-11-12T17:36:42+00:00", "creator_id": "eval_bad_huge", "event": "rejected", "status": "rejected", "reason": "text_too_long"},
+  {"timestamp": "2026-11-12T17:36:42+00:00", "creator_id": "eval_bad_empty", "event": "rejected", "status": "rejected", "reason": "empty_text"},
+  {"timestamp": "2026-11-12T17:37:03+00:00", "content_id": "efc43f1cdecc46b3894940bc5e02170a", "creator_id": "eval_appeal_1", "event": "appeal", "status": "under_review", "reasoning": "trial appeal 1"},
+  {"timestamp": "2026-11-12T17:37:55+00:00", "content_id": "97960ae6e0ff4b9299bdb137103a475b", "creator_id": "attacker_FP02", "guess": "unsure", "model_score": 0.8435, "style_score": 0.6175, "combined_score": 0.7418, "label": "We can't tell whether a person or a model wrote this, so we are not labelling it as either.", "status": "decided"}
+]
 ```
 
-**The single worst outcome** — the one I'd least want to explain to a writer
-whose work got caught by it:
-
-
+**The single worst outcome** — FP02. The text is "Today I did my homework. I sat at the table…" A person wrote that. Signal one scored 0.8435 because the words are common and the sentences are short. Style scored 0.6175. They agreed (gap 0.226), so `combine_signals` kept the 0.55/0.45 weighted sum, 0.7418, and `score_to_label` said AI. That is the writer I followed in unit 7, accused.
 
 ---
 
 ## Run Log and Verdicts
 
-<!-- Your five criteria across three trials. `run_eval.py --label before`. -->
+`run_eval.py --label before` wrote `results/run_2026-11-12_1236_before.md`. Criterion 4 was run by `eval_appeals.py` because an appeal needs a `content_id` from a prior submit. `results/appeals_eval.json`.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. my own writing | at most 1 of 8 labelled AI | 0/8 AI | 0/8 AI | 0/8 AI | met |
+| 2. score spread | AI score ≥ human + 0.20 | 0.868 vs 0.279 (Δ 0.59) | same | same | met |
+| 3. label coverage | all three labels in 6 inputs | human, unsure, ai | same | same | met |
+| 4. appeal path | 5 under_review; 3 unknown 404, no appeal line | 5/5 + 3×404 | (same script, one pass) | (same) | met |
+| 5. bad input | missing / empty / >8000 → 400, never 500 | 400, 400, 400 | 400, 400, 400 | 400, 400, 400 | met |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+**Real output from one trial**, `results/run_2026-11-12_1236_before.md`, produced by `run_eval.py::main` / `app.py::submit`. Trial 1 of label coverage:
 
 ```json
-
+[
+  {"status": 200, "guess": "human", "confidence": 0.2787, "model_score": 0.3015, "style_score": 0.2508, "sent": "The 7:42 bus was already full when I got to the stop."},
+  {"status": 200, "guess": "unsure", "confidence": 0.3947, "model_score": 0.511, "style_score": 0.2526, "sent": "Lab was supposed to end at five. It did not."},
+  {"status": 200, "guess": "unsure", "confidence": 0.67, "model_score": 0.7115, "style_score": 0.6193, "sent": "I went to the store after class."},
+  {"status": 200, "guess": "unsure", "confidence": 0.4945, "model_score": 0.7671, "style_score": 0.2218, "sent": "In conclusion, it is important to note..."},
+  {"status": 200, "guess": "ai", "confidence": 0.868, "model_score": 0.848, "style_score": 0.8925, "sent": "The results are good. The results are clear."},
+  {"status": 200, "guess": "unsure", "confidence": 0.5818, "model_score": 0.6772, "style_score": 0.4651, "sent": "The system works well. It handles most cases..."}
+]
 ```
 
 **Diagnoses**
 
-<!-- For each miss AND each broken attack: the stage and the mechanism.
+None of the five criteria missed. The broken attacks share two mechanisms, not nine separate bugs.
 
-     Your service has five stages: the route, signal one, signal two, the
-     combining rule, and the label mapping.
+1. **FP02 — label mapping on top of signal one.** Stage: signal one, then the AI threshold. Mechanism: gpt2 finds short common sentences easy. Style did not disagree enough (gap 0.226 < 0.40), so the weighted sum stayed at 0.7418, which was above 0.72. Same shape as the store-after-class person; they just landed 0.02 on the wrong side of the band.
 
-     Not a diagnosis:  "The evasion attacks got through."
-     A diagnosis:      "Four evasion inputs got through. All four had typos
-                        added to AI-generated text. My second signal measures
-                        word variety, and typos raise word variety — so it read
-                        them as more human. My combining rule weights that
-                        signal at 0.6, so it dragged the whole score down."
+2. **EV03 / EV04 — signal one, not style.** Chopping AI text into crumbs dropped model score to 0.1446 / 0.2981. Broken sentences surprise gpt2. Style moved some, but the combining rule followed the model. EV03 crossed the human threshold. This is the inverse of the false-positive: the model cannot tell authorship from predictability, so wrecking predictability looks human.
 
-     Look for a pattern. Five failures on one signal is one problem, not five. -->
+3. **EV05 / EV06 — combining rule on disagreement.** Wrapping AI in a quotation or a human clause dropped style (punctuation, lumpier shape) while the model stayed mid. Gaps crossed 0.40, so `combine_signals` averaged toward the middle. Unsure is what the rule is supposed to do on a split. The attack still "got through" in the sense that it avoided an AI label.
 
+4. **AI02 / AI03 — combining rule, same split as unit 7.** Stock boilerplate is 0.7671 model / 0.2218 style. Average 0.4945, unsure. I already accepted this in unit 7. Confident AI needs both signals high. Typos (EV01/EV02) did **not** help the attacker: style stayed 0.8925 because repeating the same misspellings does not raise type-token ratio the way unique typos would.
 
+5. **FL01–FL10 — the route's limiter, working as designed until the 11th.** Ten 200s then 429. The attack's target was "no 429". It got ten probes and then the cap. That is the trade of a 10/minute limit, not a miss of the limiter.
 
 ---
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** `config.py` `AI_THRESHOLD` 0.72 → 0.75. One number. The combining rule, the style measures, and the route stayed put.
 
-**Which diagnosis pointed at it:**
+**Which diagnosis pointed at it:** Diagnosis 1. FP02 was 0.7418. Moving the AI line above that score turns the accusation into `unsure` without pretending signal one can see authorship.
 
 ### Attack Run — After
 
-<!-- Same format. `run_attacks.py --label after` -->
+`results/attack_run_2026-11-12_1237_after.md`. Same 36 inputs.
 
-
+| ID | Before | After | Verdict after |
+|---|---|---|---|
+| FP02 | ai 0.742 | unsure 0.742 | HELD (was BROKE) |
+| FP01, FP03–FP06 | unsure | unsure | HELD |
+| EV01, EV02 | ai | ai | HELD |
+| EV03 | human 0.234 | human 0.234 | BROKE |
+| EV04–EV06 | unsure | unsure | BROKE |
+| AI01 | ai 0.868 | ai 0.868 | HELD |
+| AI02, AI03 | unsure | unsure | BROKE |
+| HM01, HM02 | human / unsure | same | HELD |
+| MR01–MR07 | 400 | 400 | HELD |
+| FL01–FL10 / FL11–FL12 | 200 then 429 | 200 then 429 | same |
 
 **Did it help, and how do I know:**
-
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
-
-
+FP02 is no longer an accusation. Combined score did not change (0.7418 both times); only the label mapping did. AI01 is still AI at 0.868, so I did not delete the AI label. The cost is real: anything between 0.72 and 0.75 that used to say AI now says unsure. On this set that band contained one human paragraph and no extra AI paragraph, so the trade showed up as a win. On a larger set it would hide some machine text. EV03 is untouched — a threshold move cannot fix a model score of 0.14.
 
 ---
 
 ## What's Still Broken
 
-<!-- For each attack still getting through and each criterion still missed:
-     what you'd do, and why you stopped. -->
-
-
+- **EV03 / EV04.** Chopped AI still reads human to gpt2. I would have to score a cleaned copy (restore sentence boundaries) as a third signal. I stopped because that is a new signal, not one change, and it would also flatten lumpy human writing.
+- **EV05 / EV06 and AI02 / AI03.** Disagreement averaging will keep stock boilerplate and quoted AI in `unsure`. Tightening DISAGREE_GAP would let the model veto style, which is how FP02 happened in the first place.
+- **FL01–FL10.** Ten free probes per minute per creator_id. Lowering to 3/minute would punish a writer who retries after a 400. I left 10.
+- **A new `creator_id` on every request still bypasses the limiter.** Counting only on IP would punish a shared NAT. I stopped because unit 8 asked for one improvement and I spent it on the accusation.
 
 **The trade I'd make if this ran for real:**
-
-<!-- Two sentences. Fewer wrong accusations means more AI text getting through.
-     Say which way you'd go and WHO PAYS FOR IT. -->
+I would keep the wide unsure band and the 0.75 AI line. The person who pays is the platform: more machine text sits unlabelled. The person who does not pay is the plain writer who used to get called a model.
 
 
 
