@@ -83,7 +83,10 @@ DISAGREE_GAP = 0.40
 # some AI text through, so a score has to be plainly high before it says AI
 # and plainly low before it says human.
 HUMAN_THRESHOLD = 0.30
-AI_THRESHOLD = 0.72
+# Raised in unit 8 after FP02 (plain homework paragraph) scored 0.7418 AI.
+# 0.75 puts that accusation into unsure. Repeated-results AI at 0.868 still
+# labels. Stock boilerplate at 0.49 stays unsure — that trade was already true.
+AI_THRESHOLD = 0.75
 
 # Past this, /submit refuses the body instead of scoring it. The detector only
 # reads 400 tokens anyway, and an unbounded body is how a route gets stuck.
@@ -107,10 +110,14 @@ MAX_TEXT_CHARS = 8000
 # an hour, and a script sending a thousand variations to map your thresholds.
 # Your README has to say why your numbers and not others.
 
-RATE_LIMITING_ENABLED = os.getenv("AI201_RATE_LIMITS", "0") == "1"
+# On for unit 8. A writer resubmitting drafts a few times an hour never hits
+# 10 in a minute. A script mapping thresholds dies at the tenth request in a
+# minute, and at 80 in a day. The flood check sends 15, so the minute cap has
+# to sit under 15 or that check never prints a 429.
+RATE_LIMITING_ENABLED = os.getenv("AI201_RATE_LIMITS", "1") == "1"
 
 RATE_LIMIT_PER_MINUTE = 10
-RATE_LIMIT_PER_DAY = 200
+RATE_LIMIT_PER_DAY = 80
 
 # Flask-Limiter warns loudly without this. In-memory is right for one laptop
 # and wrong for anything real — a restart forgets every count, and two copies
