@@ -1,0 +1,111 @@
+{
+  "real_appeals": [
+    {
+      "submit_status": 200,
+      "appeal_status": 200,
+      "content_id": "efc43f1cdecc46b3894940bc5e02170a",
+      "appeal_body": {
+        "content_id": "efc43f1cdecc46b3894940bc5e02170a",
+        "message": "A person will look at this. The original label stays up until they do.",
+        "ok": true,
+        "status": "under_review"
+      },
+      "log_statuses": [
+        "decided",
+        "under_review"
+      ]
+    },
+    {
+      "submit_status": 200,
+      "appeal_status": 200,
+      "content_id": "d3cd7e17b7fa479d926df7c1c72bf8c3",
+      "appeal_body": {
+        "content_id": "d3cd7e17b7fa479d926df7c1c72bf8c3",
+        "message": "A person will look at this. The original label stays up until they do.",
+        "ok": true,
+        "status": "under_review"
+      },
+      "log_statuses": [
+        "decided",
+        "under_review"
+      ]
+    },
+    {
+      "submit_status": 200,
+      "appeal_status": 200,
+      "content_id": "4d4798f191694f00873e35a762ebdd9a",
+      "appeal_body": {
+        "content_id": "4d4798f191694f00873e35a762ebdd9a",
+        "message": "A person will look at this. The original label stays up until they do.",
+        "ok": true,
+        "status": "under_review"
+      },
+      "log_statuses": [
+        "decided",
+        "under_review"
+      ]
+    },
+    {
+      "submit_status": 200,
+      "appeal_status": 200,
+      "content_id": "df091b3006b14ad2b0ea12168315a9df",
+      "appeal_body": {
+        "content_id": "df091b3006b14ad2b0ea12168315a9df",
+        "message": "A person will look at this. The original label stays up until they do.",
+        "ok": true,
+        "status": "under_review"
+      },
+      "log_statuses": [
+        "decided",
+        "under_review"
+      ]
+    },
+    {
+      "submit_status": 200,
+      "appeal_status": 200,
+      "content_id": "06a1553d381e46d9a611e2ec8293fb59",
+      "appeal_body": {
+        "content_id": "06a1553d381e46d9a611e2ec8293fb59",
+        "message": "A person will look at this. The original label stays up until they do.",
+        "ok": true,
+        "status": "under_review"
+      },
+      "log_statuses": [
+        "decided",
+        "under_review"
+      ]
+    }
+  ],
+  "unknown": [
+    {
+      "content_id": "does-not-exist-1",
+      "status": 404,
+      "body": {
+        "content_id": "does-not-exist-1",
+        "error": "not_found",
+        "message": "No decision with that content_id."
+      },
+      "appeal_lines": 0
+    },
+    {
+      "content_id": "does-not-exist-2",
+      "status": 404,
+      "body": {
+        "content_id": "does-not-exist-2",
+        "error": "not_found",
+        "message": "No decision with that content_id."
+      },
+      "appeal_lines": 0
+    },
+    {
+      "content_id": "does-not-exist-3",
+      "status": 404,
+      "body": {
+        "content_id": "does-not-exist-3",
+        "error": "not_found",
+        "message": "No decision with that content_id."
+      },
+      "appeal_lines": 0
+    }
+  ]
+}
