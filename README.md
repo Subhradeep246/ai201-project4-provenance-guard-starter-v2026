@@ -131,6 +131,10 @@ The stock AI paragraph is the one that looks like AI when you read it, and the s
 
 A score sitting on 0.30 is human, and a score sitting on 0.72 is AI, because `score_to_label` uses `<=` and `>=`. All three were reached on the live service on 12 Nov 2026: the lumpy bus paragraph at 0.2787 (`human`), the store-after-class paragraph at 0.67 (`unsure`), and the repeated "results are good" paragraph at 0.868 (`ai`).
 
+> **Revised in unit 8:** `AI_THRESHOLD` moved from 0.72 to 0.75, so unsure is 0.30 – 0.75 and high-confidence AI is 0.75 – 1.00. The three sentences did not change. The homework false positive (FP02) scored 0.7418 — under the new line it is unsure; 0.868 still labels AI.
+>
+> **Why revised:** The original 0.72 line is what unit 7 shipped and what the sample run used. Lowering a missed *criterion* is not allowed; moving a threshold after a measured accusation is the unit 8 improvement, and the table has to match `config.py` or the grader's check against the code fails.
+
 **Why I worded the "unsure" one this way:**
 
 The person reading it may have written every word. The sentence says we cannot tell, and it says we are not applying either label. It does not say the writing looks suspicious.
@@ -305,6 +309,18 @@ $ curl.exe "http://127.0.0.1:5000/log?limit=6"
 - *What I asked for:* Recheck the running service with curl: ping, empty text, a missing field, one submission of each label, a real appeal, and an unknown id.
 - *What came back:* JSON, plus a first draft of Sample Run that pasted log *entries* as if they were the curl body.
 - *What I changed:* PowerShell's `curl` is not curl, so every request uses `curl.exe` and a `.json` file in the repo. The first broken body is still the first line of `logs/audit.jsonl` (`body_not_json_object`). Sample Run now pastes the real `GET /log` wrapper (`count` + `entries`), the 404 appeal, and the 400s. I also turned rate limiting back off — that is unit 8, and leaving it on made `/submit` look like a different service than the one this write-up describes.
+
+**Moment 4**
+
+- *What I asked for:* Run unit 8: rate limit, attack set, three-trial eval, diagnose, one fix.
+- *What came back:* A limiter, a reconstructed `attack_set/` (no staff zip in the starter), FP02 labelled AI at 0.7418, and a suggestion to also "fix" chopped-sentence evasions in the same change.
+- *What I changed:* Kept one change: `AI_THRESHOLD` 0.72 → 0.75. Re-ran `--label after`. FP02 became unsure; EV03 stayed human. I did not pretend one number would fix both.
+
+**Moment 5**
+
+- *What I asked for:* Deploy it (unit 9) and a demo script (unit 10).
+- *What came back:* A Render/Railway plan.
+- *What I changed:* Refused the host. `_unit9_budget.py` measured 857 MB with gpt2 loaded against a 512 MB free tier. gunicorn on this laptop dies on `fcntl`. Path B is Flask on loopback with debug off, plus the arithmetic in this README.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
@@ -522,13 +538,27 @@ The audit line for that id is in `logs/audit.jsonl`. A host with an ephemeral di
 
 ## What I would demo this week
 
-Ninety seconds, one writer, three curls. No screenshots. The person is the plain writer from unit 7.
+Ninety seconds, one writer, three curls. No screenshots. Terminal 1 already has `python app.py`. These are one line each in PowerShell. The person is the plain writer from unit 7. Do not reuse `appeal.json` from the repo — that id is from an earlier run.
 
-1. `POST /submit` `@submit_plain.json` — store after class. Model ~0.71, style ~0.62, combined 0.67, **unsure**. Point at the sentence: we are not labelling it as either.
-2. `POST /submit` `@submit_ai.json` — repeated "results are good". Combined 0.868, **ai**.
-3. `POST /appeal` with that `content_id`. Status `under_review`. Original `decided` line still in `GET /log`.
+```powershell
+curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" --data-binary "@submit_plain.json"
+```
 
-If there is a fourth beat: `@submit_human.json` (the bus paragraph) at 0.2787 **human**, so all three labels are reachable on the live process.
+Store after class. Combined ~0.67, **unsure**. Point at the sentence: we are not labelling it as either.
+
+```powershell
+curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" --data-binary "@submit_ai.json"
+```
+
+Repeated "results are good". Combined 0.868, **ai**. Copy `content_id` from this body.
+
+```powershell
+curl.exe -X POST http://127.0.0.1:5000/appeal -H "Content-Type: application/json" --data-binary "@appeal.json"
+```
+
+Only after you have pasted that new `content_id` into `appeal.json`. Status `under_review`. `GET /log` still has the original `decided` line.
+
+Fourth beat if there is time: `@submit_human.json` at 0.2787 **human**, so all three labels show up live.
 
 I would not demo gunicorn on this laptop, a free-host URL, or the 550 MB download. Those are unit 9's point, not a feature.
 
@@ -539,6 +569,8 @@ Ship the wide unsure band (`HUMAN_THRESHOLD` 0.30, `AI_THRESHOLD` 0.75), the dis
 Do not ship this on a 512 MB host. If it had to leave the laptop, the bill is RAM for torch + gpt2 and a disk that still has the weights after idle — not a free dyno.
 
 Still broken in a demo: chopped AI (EV03) still reads **human**; stock boilerplate (AI02) stays **unsure**. I would say that out loud rather than hide it.
+
+**What this pair taught me:** Predictability is not authorship, and a combining rule that treats disagreement as uncertainty will miss some machine text on purpose. A free host is not a deployment if the model does not fit in memory. The expensive mistake is still a wrong accusation.
 
 **Repository URL (same as units 7–9):** `https://github.com/Subhradeep246/ai201-project4-provenance-guard-starter-v2026`
 
