@@ -458,7 +458,89 @@ FP02 is no longer an accusation. Combined score did not change (0.7418 both time
 **The trade I'd make if this ran for real:**
 I would keep the wide unsure band and the 0.75 AI line. The person who pays is the platform: more machine text sits unlabelled. The person who does not pay is the plain writer who used to get called a model.
 
+<!-- ═══════════════════════ UNIT 9 — SOMEWHERE ELSE ═══════════════════════ -->
 
+---
+
+## Path B — this laptop, with logs
+
+Unit 9 asks you to deploy one of the systems. For this pair the host is already decided, and it is not a free tier.
+
+**The path:** Path B — local, with logs. Same repository URL as units 7 and 8.
+
+**The arithmetic, measured on this machine** (`_unit9_budget.py` after `detector.warm_up()`):
+
+| What has to be in memory | This run |
+|---|---|
+| Process before gpt2 | 14 MB |
+| Process after gpt2 loads | **857 MB** |
+| Flask, gunicorn, the route | already inside that 857 MB once the model is warm |
+| **A typical free tier** | **512 MB** |
+| **Over budget** | **345 MB**, before the first `/submit` |
+
+The weights are also ~550 MB on disk. A free host has no persistent disk, so that download starts again after every idle spin-down. There is no env var that makes gpt2 smaller. I did not spend an evening watching a host OOM-kill the worker. That refusal is the deliverable.
+
+**The start command a Linux host would use** (also `Procfile`):
+
+```bash
+gunicorn app:app --bind 0.0.0.0:$PORT
+```
+
+| Variable | Default | What it does |
+|---|---|---|
+| `HOST` | `127.0.0.1` | Loopback. A public host needs `0.0.0.0` or nothing outside the box can reach it |
+| `PORT` | `5000` | Hosts hand you `PORT` and expect you to bind that one |
+| `AI201_DEBUG` | `1` | Debug is a Python prompt inside the process. `config.py` turns it off whenever `HOST` is not loopback |
+
+On this Windows laptop gunicorn never binds: it imports `fcntl` and dies (`ModuleNotFoundError: No module named 'fcntl'`). Path B here is Flask on loopback with debug off:
+
+```
+$env:AI201_DEBUG='0'; python app.py
+```
+
+Startup said `Debug mode: off` and still warned it is a development server — which is true, and is why gunicorn exists for a Unix host that could hold 857 MB, which a 512 MB free tier cannot.
+
+**Live log from that process** (`results/unit9_local.md`):
+
+`GET /health` after a scored submit:
+
+```json
+{"detector_loaded":true,"detector_model":"gpt2","log_entries":174,"ok":true,"rate_limiting":true}
+```
+
+`POST /submit` `@submit_human.json` (HTTP 200):
+
+```json
+{"combined_score":0.2787,"confidence":0.2787,"content_id":"05e6acc8af054d5480a24d50ef5a3165","guess":"human","label":"We think a person wrote this.","model_score":0.3015,"style_score":0.2508}
+```
+
+The audit line for that id is in `logs/audit.jsonl`. A host with an ephemeral disk would have lost every earlier line on spin-down. Path B keeps the file.
+
+<!-- ═══════════════════════ UNIT 10 — DEMO / SHIP ═══════════════════════ -->
+
+---
+
+## What I would demo this week
+
+Ninety seconds, one writer, three curls. No screenshots. The person is the plain writer from unit 7.
+
+1. `POST /submit` `@submit_plain.json` — store after class. Model ~0.71, style ~0.62, combined 0.67, **unsure**. Point at the sentence: we are not labelling it as either.
+2. `POST /submit` `@submit_ai.json` — repeated "results are good". Combined 0.868, **ai**.
+3. `POST /appeal` with that `content_id`. Status `under_review`. Original `decided` line still in `GET /log`.
+
+If there is a fourth beat: `@submit_human.json` (the bus paragraph) at 0.2787 **human**, so all three labels are reachable on the live process.
+
+I would not demo gunicorn on this laptop, a free-host URL, or the 550 MB download. Those are unit 9's point, not a feature.
+
+## What I would actually ship
+
+Ship the wide unsure band (`HUMAN_THRESHOLD` 0.30, `AI_THRESHOLD` 0.75), the disagreement average in `scoring.py::combine_signals`, `/appeal`, and the 10/minute cap. Do not ship a confident AI label on ordinary short sentences.
+
+Do not ship this on a 512 MB host. If it had to leave the laptop, the bill is RAM for torch + gpt2 and a disk that still has the weights after idle — not a free dyno.
+
+Still broken in a demo: chopped AI (EV03) still reads **human**; stock boilerplate (AI02) stays **unsure**. I would say that out loud rather than hide it.
+
+**Repository URL (same as units 7–9):** `https://github.com/Subhradeep246/ai201-project4-provenance-guard-starter-v2026`
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
@@ -489,6 +571,20 @@ I would keep the wide unsure band and the 0.75 AI line. The person who pays is t
        [ ] What's Still Broken, including the production trade
        [ ] At least four new commits
        [ ] The SAME repository URL as last unit
+
+     SUBMISSION CHECKLIST — unit 9
+
+       [ ] Path B: local, with logs — not a free host
+       [ ] Arithmetic: torch + gpt2 vs 512 MB, measured
+       [ ] gunicorn command / Procfile named; debug off off-loopback
+       [ ] Pasted local health + submit as text
+       [ ] The SAME repository URL as last unit
+
+     SUBMISSION CHECKLIST — unit 10
+
+       [ ] Demo is three curls on the live process, following one writer
+       [ ] What I would ship vs what I would not put on a free host
+       [ ] The SAME repository URL
 
      Do not delete and recreate this repository.
      ═════════════════════════════════════════════════════════════════════ -->
