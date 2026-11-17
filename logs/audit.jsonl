@@ -171,3 +171,4 @@
 {"timestamp": "2026-11-12T17:37:58+00:00", "content_id": "3bbd9106141f40d18c106078b33f18c5", "creator_id": "flood_same_creator", "guess": "unsure", "model_score": 0.0086, "style_score": 0.6667, "combined_score": 0.3377, "label": "We can't tell whether a person or a model wrote this, so we are not labelling it as either.", "status": "decided"}
 {"timestamp": "2026-11-12T17:37:58+00:00", "creator_id": "flood_same_creator", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "10 per 1 minute"}
 {"timestamp": "2026-11-12T17:37:58+00:00", "creator_id": "flood_same_creator", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "10 per 1 minute"}
+{"timestamp": "2026-11-17T13:22:45+00:00", "content_id": "05e6acc8af054d5480a24d50ef5a3165", "creator_id": "subhradeep", "guess": "human", "model_score": 0.3015, "style_score": 0.2508, "combined_score": 0.2787, "label": "We think a person wrote this.", "status": "decided"}
