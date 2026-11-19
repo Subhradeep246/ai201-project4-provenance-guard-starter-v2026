@@ -184,7 +184,7 @@ def write_report(rows, args):
 
     path.write_text("\n".join(lines), encoding="utf-8")
     print(f"\nWrote {path.relative_to(config.ROOT)}")
-    print("Commit it. It's the evidence the test actually happened.")
+    print("test done!.")
 
 
 if __name__ == "__main__":
