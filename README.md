@@ -464,6 +464,29 @@ FP02 is no longer an accusation. Combined score did not change (0.7418 both time
 
 ---
 
+## Attack report verdicts — feedback fix
+
+The attack runner now fills every Verdict and Reason for the bundled families.
+HELD means the case met its defense expectation; BROKE means the attack reached
+its target or the API failed. REVIEW explicitly identifies unsupported families
+or rate limits that prevented the classification/validation being tested.
+
+The earlier raw reports are preserved. These new reports re-evaluate their
+saved observations without API requests, model scoring, or changed labels:
+
+- [Before: verdicts and reasons](results/attack_run_2026-11-18_194150_186394_feedback_before.md)
+- [After: verdicts and reasons](results/attack_run_2026-11-18_194150_433262_feedback_after.md)
+
+All 36 rows in each report have a verdict and explanation. FP02 changes from
+BROKE before to HELD after, while EV03 remains BROKE. The after-run still has
+six classification misses. Ten flood probes reached their HTTP 200 target and
+two were blocked with 429; accepted probes inside the allowance are expected,
+so those ten individual BROKE verdicts are not ten limiter bugs. The family
+summary reports accepted and blocked counts separately.
+
+See [RUNNING.md](RUNNING.md#attack-verdicts-and-reports-from-earlier-runs) for
+verdict rules, offline re-evaluation commands, and report regression checks.
+
 ## What's Still Broken
 
 - **EV03 / EV04.** Chopped AI still reads human to gpt2. I would have to score a cleaned copy (restore sentence boundaries) as a third signal. I stopped because that is a new signal, not one change, and it would also flatten lumpy human writing.

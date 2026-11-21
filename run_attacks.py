@@ -33,18 +33,16 @@ whose rows deliberately share a creator_id — those are the only attacks in the
 set that mean anything with limiting switched on, and this script warns you
 before the run if it's off.
 
-Sending the whole set by hand would eat the milestone, so this does the sending
-and the recording. What it does **not** do is decide whether an attack held or
-broke — that judgment is the milestone.
+Known attack families receive HELD or BROKE with a reason, based on the
+returned label and the family's documented target. Unexpected families and
+rate-limited classification tests receive REVIEW with an explanation, never
+a blank verdict. These are attack outcomes, not overall detector accuracy.
 
-That judgment is yours, and it has to be: whether an evasion "worked" depends
-on where you put your thresholds, and two students with different bands will
-honestly reach different verdicts on the same input. The `targets` column says
-what each attack was going for; you say whether it got there.
+To fill verdicts from an earlier saved run without sending requests again:
 
-The one thing it does decide for you is the unambiguous case. A 500, a
-connection drop, or an unhandled exception is **broke** — no threshold makes a
-crash acceptable.
+    python run_attacks.py --set attack_set --rejudge results/attack_run_<date>.md
+
+This writes a new report and preserves the original observations and report.
 
 Writes `results/attack_run_<date>.md`, which is what you paste into your README.
 """
@@ -53,6 +51,7 @@ import argparse
 import csv
 import datetime as dt
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -188,11 +187,12 @@ def warn_about_rate_limits(attacks, health):
     print("!" * 60 + "\n", file=sys.stderr)
 
 
-def auto_verdict(status, payload, error):
-    """
-    The only verdicts a script can honestly reach on its own.
+def auto_verdict(status, payload, error, family=None):
+    """Judge the bundled families against their targets, with explicit reasons.
 
-    Everything else comes back blank for you to fill in.
+    HELD means the defense met this case's expectation; BROKE means an attack
+    reached its target or the API failed. REVIEW means evidence is insufficient.
+    A flood's accepted probe is not, by itself, proof of a broken limiter.
     """
     if error and "ConnectionError" in error:
         return "BROKE", "the service stopped responding"
@@ -202,7 +202,66 @@ def auto_verdict(status, payload, error):
         return "BROKE", "no response"
     if status >= 500:
         return "BROKE", f"{status} — unhandled error"
-    return "", ""
+    if not isinstance(payload, dict):
+        return "BROKE", "response must be a JSON object"
+
+    if family == "malformed":
+        if status == 400:
+            return "HELD", "malformed input rejected with HTTP 400"
+        if status == 429:
+            return "REVIEW", "rate limit masked the input-validation result; retry after the window"
+        return "BROKE", f"expected HTTP 400 for malformed input; received {status}"
+
+    if family == "flood_same_creator":
+        if status == 429:
+            return "HELD", "probe blocked by the rate limiter"
+        if status == 200:
+            return "BROKE", "probe reached its 200 target; accepted probes within the allowance are expected, not a limiter failure"
+        return "BROKE", f"unexpected flood response HTTP {status}; expected 200 or 429"
+
+    human_families = {"false_positive", "lumpy_human"}
+    ai_families = {"clearly_ai", "evasion_typos", "evasion_break", "evasion_quote"}
+    if family not in human_families | ai_families:
+        return "REVIEW", f"no automatic expectation for family {family!r}; define its expected outcome"
+    if status == 429:
+        return "REVIEW", "rate limit prevented classification; retry after the window"
+    if status != 200:
+        return "BROKE", f"classification expected HTTP 200; received {status}"
+
+    guess = payload.get("guess")
+    if not isinstance(guess, str) or guess not in {"human", "unsure", "ai"}:
+        return "BROKE", "successful response is missing a valid human/unsure/ai guess"
+    if family in human_families:
+        if guess == "ai":
+            return "BROKE", "human fixture labelled AI: false accusation"
+        return "HELD", f"human fixture labelled {guess}; no confident AI accusation"
+    if guess == "ai":
+        return "HELD", "AI fixture still labelled AI"
+    return "BROKE", f"AI fixture labelled {guess}; avoided the expected AI label"
+
+
+def rejudge_report(path, attacks):
+    """Re-evaluate saved JSON observations, never rescore text or contact the API."""
+    known = {attack["id"]: attack for attack in attacks}
+    rows, seen = [], set()
+    for block in re.findall(r"```json\s*\n(.*?)\n```", path.read_text(encoding="utf-8"), re.S):
+        record = json.loads(block)
+        if not isinstance(record, dict) or "id" not in record or "status" not in record:
+            continue
+        attack_id = record["id"]
+        if attack_id not in known:
+            raise ValueError(f"saved attack {attack_id!r} is absent from this attack set")
+        if attack_id in seen:
+            raise ValueError(f"duplicate saved result for {attack_id}")
+        seen.add(attack_id)
+        attack = known[attack_id]
+        row = dict(record, family=attack["family"], targets=attack["targets"])
+        row["verdict"], row["note"] = auto_verdict(
+            row["status"], row, row.get("error"), row["family"])
+        rows.append(row)
+    if not rows:
+        raise ValueError("report contains no saved attack results with id and status")
+    return rows
 
 
 def select_attacks(attacks, args):
@@ -408,6 +467,8 @@ def main():
                         help="who --flood submits as")
     parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--label", default="", help="e.g. before / after")
+    parser.add_argument("--rejudge", type=Path,
+                        help="write verdicts from a saved attack report; no API requests")
     parser.add_argument("--timeout", type=float, default=90.0,
                         help="seconds per request — signal one runs a model, so be generous")
     parser.add_argument("--family", help="run only one family")
@@ -419,6 +480,9 @@ def main():
                         help="print the selected attack(s) and a curl command for "
                              "each instead of sending anything")
     args = parser.parse_args()
+
+    if args.rejudge and (args.flood or args.attack_id or args.family or args.one_per_family or args.show):
+        parser.error("--rejudge cannot be combined with flood, selection, or show options")
 
     if args.flood:
         require_requests()
@@ -443,6 +507,14 @@ def main():
         print(f"No attack files found in {folder}.\n"
               f"Expected attacks.csv — check the path.", file=sys.stderr)
         sys.exit(1)
+
+    if args.rejudge:
+        try:
+            rows = rejudge_report(args.rejudge, attacks)
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+        write_report(rows, args)
+        return
 
     attacks, complaint = select_attacks(attacks, args)
     if complaint:
@@ -471,9 +543,9 @@ def main():
     rows = []
     for i, attack in enumerate(attacks, 1):
         status, payload, error = send(args.url, attack, args.timeout)
-        verdict, note = auto_verdict(status, payload, error)
+        verdict, note = auto_verdict(status, payload, error, attack["family"])
 
-        payload = payload or {}
+        payload = payload if isinstance(payload, dict) else {}
         row = {
             "id": attack["id"],
             "family": attack["family"],
@@ -496,7 +568,7 @@ def main():
         }
         rows.append(row)
 
-        mark = verdict or "?"
+        mark = verdict
         print(f"  [{i:>2}/{len(attacks)}] {attack['id']:<6} {attack['family']:<17} "
               f"{str(status):<5} {str(payload.get('guess') or '—'):<8} {mark}")
 
@@ -505,12 +577,13 @@ def main():
 
 def write_report(rows, args):
     config.RESULTS_DIR.mkdir(exist_ok=True)
-    stamp = dt.datetime.now().strftime("%Y-%m-%d_%H%M")
+    stamp = dt.datetime.now().strftime("%Y-%m-%d_%H%M%S_%f")
     label = f"_{args.label}" if args.label else ""
     path = config.RESULTS_DIR / f"attack_run_{stamp}{label}.md"
 
     broke = sum(1 for r in rows if r["verdict"] == "BROKE")
-    undecided = sum(1 for r in rows if not r["verdict"])
+    held = sum(1 for r in rows if r["verdict"] == "HELD")
+    review = sum(1 for r in rows if r["verdict"] == "REVIEW")
 
     lines = [
         f"# Attack run{f' — {args.label}' if args.label else ''}",
@@ -518,20 +591,31 @@ def write_report(rows, args):
         "- Produced by: `run_attacks.py::main`",
         "- Service: `app.py::submit`",
         f"- {len(rows)} attacks · {dt.datetime.now().strftime('%Y-%m-%d %H:%M')}",
-        f"- Auto-marked BROKE (5xx, crash, no response): **{broke}**",
-        f"- Left for you to judge: **{undecided}**",
+        f"- HELD: **{held}** · BROKE: **{broke}** · REVIEW: **{review}**",
         "",
-        "The Verdict column is blank where a script can't honestly decide. Whether",
-        "an evasion worked depends on where you put your thresholds — read the",
-        "`targets` column, look at what came back, and write HELD or BROKE yourself.",
+        "HELD means this defense met the case's expectation. BROKE means the",
+        "attack reached its target or the API failed. REVIEW identifies missing",
+        "expectations or a rate limit that prevented classification. Every row has a reason.",
+        "Human fixtures pass with human or unsure; AI/evasion fixtures require ai.",
+        "Malformed bodies require 400. Flood probes get HELD on 429 and BROKE on 200",
+        "because their stated target is acceptance. The first allowed probes are normal:",
+        "a BROKE flood row alone does not mean the limiter failed. Check the blocked count.",
         "",
-        "Each attack submits as creator_id `attacker_<id>`, and the content_id it",
+        "Text attacks submit as creator_id `attacker_<id>`; flood rows share a creator.",
+        "The content_id a scored submission",
         "came back with is in the table — either one will match this run against your",
         "audit log when you go looking for the ten entries to paste.",
         "",
-        "| ID | Family | Targeting | Status | Content ID | Guess | Score | Verdict |",
-        "|---|---|---|---|---|---|---|---|",
+        "| ID | Family | Targeting | Status | Content ID | Guess | Score | Verdict | Reason |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
+
+    if getattr(args, "rejudge", None):
+        lines[6:6] = [
+            f"- Source observations: `{args.rejudge}`",
+            "- Re-evaluated saved responses only; no new API requests or model scoring.",
+            "- Existing statuses, labels, scores, and content IDs are preserved.",
+        ]
 
     for row in rows:
         score = row["confidence"]
@@ -541,17 +625,26 @@ def write_report(rows, args):
             f"| {row['id']} | {row['family']} | {targets} | "
             f"{row['status'] or '—'} | `{row['content_id'] or '—'}` | "
             f"{row['guess'] or '—'} | {score_text} | "
-            f"{row['verdict'] or ''} |"
+            f"{row['verdict']} | {row['note'].replace('|', '/').replace(chr(10), ' ')} |"
         )
 
     lines += ["", "---", "", "## By family", ""]
     families = {}
     for row in rows:
         families.setdefault(row["family"], []).append(row)
-    lines += ["| Family | Attacks | Auto-BROKE | Left to judge |", "|---|---|---|---|"]
+    lines += ["| Family | Attacks | HELD | BROKE | REVIEW |", "|---|---|---|---|---|"]
     for family, items in sorted(families.items()):
-        auto = sum(1 for r in items if r["verdict"] == "BROKE")
-        lines.append(f"| `{family}` | {len(items)} | {auto} | {len(items) - auto} |")
+        counts = [sum(r["verdict"] == verdict for r in items)
+                  for verdict in ("HELD", "BROKE", "REVIEW")]
+        lines.append(f"| `{family}` | {len(items)} | {counts[0]} | {counts[1]} | {counts[2]} |")
+
+    flood = families.get("flood_same_creator", [])
+    if flood:
+        blocked = sum(r["status"] == 429 for r in flood)
+        accepted = sum(r["status"] == 200 for r in flood)
+        lines += ["", f"Flood observations: **{accepted} accepted**, **{blocked} blocked (429)**.",
+                  "This is observed acceptance/blocking, not proof that timing, creator identity,",
+                  "or the configured quota was correct. Inspect the sequence for those claims."]
 
     lines += [
         "",
@@ -576,7 +669,7 @@ def write_report(rows, args):
             "",
             "```json",
             json.dumps({k: v for k, v in row.items()
-                        if k not in ("targets", "family", "note")}, indent=2),
+                        if k not in ("targets", "family")}, indent=2),
             "```",
             "",
         ]
@@ -585,12 +678,12 @@ def write_report(rows, args):
 
     print(f"\n{'=' * 60}")
     print(f"Wrote {path.relative_to(config.ROOT)}")
-    print(f"  auto-marked BROKE: {broke}")
-    print(f"  left for you:      {undecided}")
+    print(f"  HELD: {held}  BROKE: {broke}  REVIEW: {review}")
     print(f"{'=' * 60}")
-    print("\nNow pull your audit log for the run and paste ten entries into your")
-    print("README. Choose the ones that show the interesting failures.")
-    print("\n  curl \"http://127.0.0.1:5000/log?limit=200\" > results/audit_extract.json")
+    if not getattr(args, "rejudge", None):
+        print("\nPull matching audit entries for the run; include the interesting failures.")
+        print("\n  curl \"http://127.0.0.1:5000/log?limit=200\" > results/audit_extract.json")
+    return path
 
 
 if __name__ == "__main__":

@@ -258,7 +258,9 @@ What they do:
 
 Read `results/run_*_capstone.md`, `results/attack_run_*_capstone.md`, and
 `results/appeals_eval.json`. Compare actual outcomes against `criteria.md`;
-not every target or verdict is filled in automatically. The acceptance targets:
+the acceptance evaluator still requires comparison with your targets. Attack
+reports now fill every Verdict and Reason automatically for the bundled families.
+The acceptance targets:
 
 1. At most **1 of 8** human paragraphs labelled AI.
 2. AI example scores at least **0.20** above the human example.
@@ -277,6 +279,53 @@ The saved before/after attack results show the improvement: raising
 **0.7418** from AI to unsure. AI01 stayed AI at **0.8680**. Chopped AI example
 EV03 still scored about **0.234** and was labelled human. These are small,
 hand-selected tests, not a general accuracy benchmark.
+
+### Attack verdicts and reports from earlier runs
+
+Every attack row now has a Verdict and a Reason:
+
+- **HELD:** human fixtures returned human/unsure, AI/evasion fixtures returned
+  AI, malformed input returned 400, or a flood probe was blocked with 429.
+- **BROKE:** a human fixture was accused, an AI fixture avoided the AI label,
+  malformed input was accepted, an API/connection failed, or a flood probe
+  reached its stated target of HTTP 200.
+- **REVIEW:** an unknown family needs an expectation, or a 429 prevented the
+  classification/validation being tested. The reason tells you what to check.
+
+These verdicts evaluate the supplied fixtures and attack targets, not general
+authorship accuracy. In particular, a flood probe accepted within the normal
+allowance is expected. Its BROKE verdict means that individual probe reached
+its 200 target, not that the limiter failed. The report separately shows how
+many probes were accepted and blocked; inspect timing and quotas before
+claiming that the limiter is correct or broken.
+
+To add verdicts to the saved after-run **without running the model or server**:
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe run_attacks.py --set attack_set --rejudge results/attack_run_2026-11-12_1237_after.md --label feedback_after
+```
+
+macOS / Linux:
+
+```bash
+.venv/bin/python run_attacks.py --set attack_set --rejudge results/attack_run_2026-11-12_1237_after.md --label feedback_after
+```
+
+This writes a new timestamped report, records the source report, and preserves
+the observed statuses, labels, scores, and content IDs. It does not pretend to
+be a new live run or apply current thresholds to old scores. Expectations come
+from the family definitions in the selected attack set. Original reports remain
+unchanged. Use the same command with a before-run path to compare the results.
+
+Report regression checks (no API/model needed):
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest test_attack_reports -v
+```
+
+On macOS / Linux, replace the interpreter with `.venv/bin/python`.
 
 ## 8. Rate limits and a dedicated flood check
 
