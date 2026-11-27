@@ -629,11 +629,11 @@ Still broken in a demo: chopped AI (EV03) still reads **human**; stock boilerpla
 
      SUBMISSION CHECKLIST — unit 9
 
-       [ ] Path B: local, with logs — not a free host
-       [ ] Arithmetic: torch + gpt2 vs 512 MB, measured
-       [ ] gunicorn command / Procfile named; debug off off-loopback
-       [ ] Pasted local health + submit as text
-       [ ] The SAME repository URL as last unit
+       [x] Path B: local, with logs — not a free host
+       [x] Arithmetic: torch + gpt2 vs 512 MB, measured
+       [x] gunicorn command / Procfile named; debug off off-loopback
+       [x] Pasted local health + submit as text
+       [x] The SAME repository URL as last unit
 
      SUBMISSION CHECKLIST — unit 10
 

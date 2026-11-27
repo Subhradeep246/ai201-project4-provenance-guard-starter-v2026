@@ -61,3 +61,21 @@ WARNING: This is a development server. Do not use it in a production deployment.
 ```json
 {"combined_score":0.2787,"confidence":0.2787,"content_id":"05e6acc8af054d5480a24d50ef5a3165","guess":"human","label":"We think a person wrote this.","model_score":0.3015,"style_score":0.2508}
 ```
+
+## Fresh end-to-end verification — 26 Nov 2026
+
+The isolated `.venv` readiness check passed all 9 checks. A new debug-off local
+process then passed `/ping`, `/health`, submit, appeal, audit-log persistence,
+and empty-text rejection in one live flow:
+
+- GPT-2 changed from `detector_loaded: false` to `true` after the submit.
+- `submit_human.json` returned HTTP 200, `human`, and score `0.2787`.
+- The fresh `content_id` had both `decided` and `under_review` audit entries.
+- Empty text returned HTTP 400.
+
+The three-trial acceptance report is
+`results/run_2026-11-26_2031_unit9_e2e.md`; all five stated criteria passed
+(criterion 4 is in `results/appeals_eval.json`). The 36-case attack report is
+`results/attack_run_2026-11-26_203148_404574_unit9_e2e.md`. It reproduces the
+documented detector blind spots while confirming malformed-request handling and
+the 10-per-minute limiter.
